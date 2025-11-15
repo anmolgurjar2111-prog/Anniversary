@@ -1,45 +1,70 @@
-# app.py
-# Simple static file server using only Python standard library (no Flask required).
-# Place this file next to a folder named 'static' containing your index.html, video, images, CSS, etc.
-#
-# Usage:
-#   python app.py
-# Then open http://127.0.0.1:8000/ in your browser.
-#
-# This avoids the ModuleNotFoundError for Flask by using http.server.
+# streamlit_app.py
+import streamlit as st
+import streamlit.components.v1 as components
+import os, re, base64
 
-import http.server
-import socketserver
-import os
-import sys
+st.set_page_config(page_title="Embedded HTML", layout="centered")
 
-PORT = 8000
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+BASE = os.path.dirname(__file__)
+STATIC_DIR = os.path.join(BASE, "static")
+INDEX_PATH = os.path.join(STATIC_DIR, "index.html")
+EMBED_LIMIT_BYTES = 6 * 1024 * 1024
 
-if not os.path.isdir(STATIC_DIR):
-    print(f"Error: static directory not found at {STATIC_DIR}")
-    print("Create a 'static' folder and put your index.html and assets inside it.")
-    sys.exit(1)
+if not os.path.exists(INDEX_PATH):
+    st.error(f"index.html not found in: {STATIC_DIR}")
+    st.stop()
 
-class Handler(http.server.SimpleHTTPRequestHandler):
-    def translate_path(self, path):
-        # Serve files out of the static/ directory by default.
-        # If path is '/', serve static/index.html
-        if path == "/":
-            path = "/index.html"
-        # Remove leading slash
-        rel_path = path.lstrip("/")
-        full_path = os.path.join(STATIC_DIR, rel_path)
-        return full_path
+html = open(INDEX_PATH, "r", encoding="utf-8").read()
 
-    def log_message(self, format, *args):
-        # Override to be a bit quieter. Comment out this method to see access logs.
-        pass
+def to_data_uri(filepath):
+    ext = os.path.splitext(filepath)[1].lower()
+    mime = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".mp4": "video/mp4",
+    }.get(ext, None)
+    if mime is None: return None
+    size = os.path.getsize(filepath)
+    if size > EMBED_LIMIT_BYTES: return None
+    with open(filepath, "rb") as f:
+        data = f.read()
+    import base64
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{b64}"
 
-with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
-    print(f"Serving at http://127.0.0.1:{PORT}/ (static folder: {STATIC_DIR})")
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("Shutting down server")
-        httpd.server_close()
+def replace_assets(html_text):
+    modified = html_text
+    video_fallbacks = []
+    pattern = re.compile(r'(src|href)=(["'])([^"']+?\.(?:png|jpg|jpeg|gif|svg|mp4))\2', re.IGNORECASE)
+
+    def repl(m):
+        attr, quote, ref = m.group(1), m.group(2), m.group(3)
+        if ref.startswith(("http://","https://","data:")): return m.group(0)
+        candidate = os.path.join(STATIC_DIR, ref.lstrip("/"))
+        if not os.path.exists(candidate): return m.group(0)
+        data_uri = to_data_uri(candidate)
+        if data_uri:
+            return f'{attr}={quote}{data_uri}{quote}'
+        else:
+            if candidate.lower().endswith(".mp4"):
+                video_fallbacks.append(candidate)
+                return f'{attr}={quote}#{quote}'
+            return m.group(0)
+
+    new_html = pattern.sub(repl, modified)
+    return new_html, video_fallbacks
+
+adjusted_html, video_fbs = replace_assets(html)
+
+st.markdown("## Preview")
+components.html(adjusted_html, height=700, scrolling=True)
+
+if video_fbs:
+    st.markdown("---")
+    for vid in video_fbs:
+        st.write("Video too large to embed:", os.path.basename(vid))
+        with open(vid, "rb") as f:
+            st.video(f.read())
