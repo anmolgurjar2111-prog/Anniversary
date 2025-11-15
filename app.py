@@ -1,26 +1,45 @@
+# app.py
+# Simple static file server using only Python standard library (no Flask required).
+# Place this file next to a folder named 'static' containing your index.html, video, images, CSS, etc.
+#
+# Usage:
+#   python app.py
+# Then open http://127.0.0.1:8000/ in your browser.
+#
+# This avoids the ModuleNotFoundError for Flask by using http.server.
 
-from flask import Flask, send_from_directory, safe_join, abort
+import http.server
+import socketserver
 import os
+import sys
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
+PORT = 8000
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
-app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
+if not os.path.isdir(STATIC_DIR):
+    print(f"Error: static directory not found at {STATIC_DIR}")
+    print("Create a 'static' folder and put your index.html and assets inside it.")
+    sys.exit(1)
 
-@app.route("/")
-def index():
-    index_path = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(index_path):
-        return send_from_directory(STATIC_DIR, "index.html")
-    else:
-        return "<h2>index.html not found in ./static</h2>", 404
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def translate_path(self, path):
+        # Serve files out of the static/ directory by default.
+        # If path is '/', serve static/index.html
+        if path == "/":
+            path = "/index.html"
+        # Remove leading slash
+        rel_path = path.lstrip("/")
+        full_path = os.path.join(STATIC_DIR, rel_path)
+        return full_path
 
-@app.route("/<path:filename>")
-def serve_file(filename):
-    safe_path = safe_join(STATIC_DIR, filename)
-    if safe_path and os.path.exists(safe_path):
-        return send_from_directory(STATIC_DIR, filename)
-    return abort(404)
+    def log_message(self, format, *args):
+        # Override to be a bit quieter. Comment out this method to see access logs.
+        pass
 
-if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
+    print(f"Serving at http://127.0.0.1:{PORT}/ (static folder: {STATIC_DIR})")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("Shutting down server")
+        httpd.server_close()
