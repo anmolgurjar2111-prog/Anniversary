@@ -1,19 +1,16 @@
-README - simple static server (no Flask)
+Streamlit project (fixed)
 
-Problem you saw:
-- ModuleNotFoundError: No module named 'flask'
-  This happens when Flask is not installed in the environment.
+Files included:
+- streamlit_app.py
+- static/index.html  (copied if available)
+- static/journey_video.mp4  (copied if available)
 
-Two easy fixes:
-1) Install Flask (if you want to keep using the Flask app):
-   - pip install flask
-   - Or add a requirements.txt containing "Flask" to your project and deploy with that.
+Usage:
+1) Unzip the folder.
+2) Install Streamlit if needed: pip install streamlit
+3) Run: streamlit run streamlit_app.py
+4) Open the URL printed by Streamlit in your browser.
 
-2) Use this replacement app.py which requires NO external packages:
-   - Place this file next to a folder named 'static' that contains index.html and assets.
-   - Run: python app.py
-   - Open: http://127.0.0.1:8000/
-
-Contents of this ZIP:
-- app.py         (std-lib static server)
-- README.txt
+Notes:
+- The app inlines small images/videos as data URIs so the iframe preview works.
+- Large videos are played using st.video() to avoid iframe black screens.
